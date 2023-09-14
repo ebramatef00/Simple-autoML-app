@@ -4,21 +4,23 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
-import streamlit as st
+from sklearn.preprocessing import StandardScaler,LabelEncoder
+from sklearn.impute import SimpleImputer
 import pycaret as py
 from pycaret.classification import *
 # Load data in various formats, including CSV, Excel
 def load_data(file_path):
     
     # Check if data in excel file 
-    if file_path.endswith("xlsx") or file_path.endswith("xls"):
-        df = pd.read_excel(file_path)
-    
-    # Check data if in CSV file
-    elif file_path.endswith("csv"):
+    if file_path.name.endswith('.csv'):
         df = pd.read_csv(file_path)
-    
+        
+    elif file_path.name.endswith('xlsx')or file_path.name.endswith("xls"):
+        df = pd.read_excel(file_path)
+        
+    elif file_path.name.endswith('sql'):
+        df = pd.read_sql(file_path)
+        
     # Avoid error in file format
     else:
         raise ValueError("unsupported file")
@@ -29,19 +31,36 @@ def load_data(file_path):
 def handling_missing_data(df):
     
    
-    for column in df.columns:
-        pre = df[column].isna().sum() / len(df) * 100
-        if pre <= 5:
-            df = df.dropna(subset=[column])
-        elif 5 < pre < 90:
-            if df[column].dtype == "object":
-                df[column] = df[column].fillna(df[column].mode()[0])
-            elif df[column].dtype in ["int64", "float64"]:
-                df[column] = df[column].fillna(df[column].mean())
+    st.subheader('Drop Columns')
+    columns_to_drop = st.multiselect("Select columns that you want to drop", options=df.columns)
+    if columns_to_drop:
+        df.drop(columns_to_drop, axis=1, inplace=True)
+    cat_cols = df.select_dtypes(include=['object']).columns
+    numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
+      
+    if len(cat_cols) > 0:
+        cat_missing = st.selectbox("How do you want to handle missing values in categorical columns?", ["most frequent", "create category"])
+        if cat_missing == "most frequent":
+            for col in cat_cols:
+                df[col].fillna(df[col].mode()[0], inplace=True)
         else:
-            df = df.drop(column, axis=1)
-               
-        return df
+            for col in cat_cols:
+                df[col].fillna("No Value", inplace=True)
+
+    if len(numerical_cols) > 0:
+        num_missing = st.selectbox("How do you want to handle missing values in numerical columns?", ["mean", "median", "mode"])
+        if num_missing == "mean":
+            for col in numerical_cols:
+                df[col].fillna(df[col].mean(), inplace=True)
+        elif num_missing == "median":
+            for col in numerical_cols:
+                df[col].fillna(df[col].median(), inplace=True)
+        else:
+            for col in numerical_cols:
+                df[col].fillna(0, inplace=True)
+
+    
+    return df
 
 def Train_model(df):
     
@@ -68,6 +87,7 @@ def Train_model(df):
             best_model = compare_models()
             compare_df = pull()
             st.dataframe(compare_df)
+            st.write("best model is ",best_model)
 
             save_model(best_model, 'best_model')
 def visualize_data(data):
@@ -126,13 +146,20 @@ def remove_outliers(data):
     return data
 
 def clean_data(data):
-    
+
     # drop null Values 
     df =handling_missing_data(data)
     
     # Encode cateogrical data
-    df = pd.get_dummies(df, columns=df.select_dtypes(include=['object']).columns)
-    
+    le = LabelEncoder()
+    for column in df.columns:
+        if df[column].dtype == 'object':
+            if len(df[column].value_counts())==2 :
+                df[column] = le.fit_transform(df[column])
+            else :
+                df = pd.get_dummies(df, columns=[column], drop_first=True)
+        elif df[column].dtype == 'bool':
+            df[column] = df[column].astype(int)
     # Encode numerical data
     scaler = StandardScaler()
     numerical_columns = df.select_dtypes(include=['float64', 'int64']).columns
@@ -142,28 +169,34 @@ def clean_data(data):
     df=remove_outliers(df)
     
     return df
+
 def main():
     st.title(" Simple pycaret App")
 
     # Upload data
     st.sidebar.header("Upload your data and preprocess it")
-    data_upload = st.file_uploader("Upload Dataset (CSV only)", type=["csv"])
+    data_upload = st.file_uploader("Upload Dataset ")
     
     try:
         if data_upload:
-            df = pd.read_csv(data_upload)
+            df = load_data(data_upload)
             st.dataframe(df)
+            st.write('The shape of data : ',df.shape)    
+            st.subheader('Data Types Of Columns')
+            st.write(df.dtypes) 
+
             # Load data from the uploaded file
             data =clean_data(df)
             st.sidebar.success("Data loaded and preprocessed successfully!")
+            
+            
+            Train_model(data)
             st.sidebar.subheader("4.Data Visualization")
             if st.sidebar.checkbox("Data Visualization"):
                 plots=visualize_data(data)
                 for plot in plots:
                     st.pyplot(plot)
 
-           
-            Train_model(data)
     except Exception as e:
             st.error(f"Error: {str(e)}")   
 if __name__ == "__main__":
