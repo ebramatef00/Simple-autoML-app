@@ -63,12 +63,26 @@ def handling_missing_data(df):
     return df
 
 def Train_model(df):
-    
+    cat_cols = df.select_dtypes(include=['object']).columns
+    numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
     chosen_target = st.selectbox('Choose the Target Column', df.columns)
-    problem_type = st.selectbox('Choose the Problem Type', ['Regression', 'Classification'])
+    if chosen_target in numerical_cols :
+        problem_type="Regression"
+    elif chosen_target in cat_cols or df[chosen_target].dtype.name == 'object' :
+        problem_type="Classification"    
+
+     
     if st.button('Run Modelling'):
         if problem_type == 'Regression':
+            
+            for column in df.columns:
+                # Encode numerical data
+                scaler = StandardScaler()
+                numerical_columns = df.select_dtypes(include=['float64', 'int64']).columns
+                df[numerical_columns] = scaler.fit_transform(df[numerical_columns])
             from pycaret.regression import setup, compare_models,pull, save_model
+            
+            #Train model
             setup(df, target=chosen_target, verbose=False)
             st.success('Setup Complete')
             st.subheader('Model Comparison')
@@ -79,6 +93,13 @@ def Train_model(df):
             st.dataframe(compare_df)
         elif problem_type == 'Classification':
             from pycaret.classification import setup, compare_models,pull, save_model
+            # Encode cateogrical data
+            le = LabelEncoder()
+            
+            df[chosen_target] = le.fit_transform(df[chosen_target])
+            #else :
+                #df = pd.get_dummies(df, columns=[chosen_target])
+            #Train_model    
             setup(df, target=chosen_target, verbose=False)
             st.success('Setup Complete')
             st.subheader('Model Comparison')
@@ -87,9 +108,9 @@ def Train_model(df):
             best_model = compare_models()
             compare_df = pull()
             st.dataframe(compare_df)
-            st.write("best model is ",best_model)
-
-            save_model(best_model, 'best_model')
+        
+        #st.write("best model is ",best_model)
+        #save_model(best_model, 'best_model')
 def visualize_data(data):
     
     plots = []
@@ -150,15 +171,9 @@ def clean_data(data):
     # drop null Values 
     df =handling_missing_data(data)
     
-    # Encode cateogrical data
-    le = LabelEncoder()
+    
     for column in df.columns:
-        if df[column].dtype == 'object':
-            if len(df[column].value_counts())==2 :
-                df[column] = le.fit_transform(df[column])
-            else :
-                df = pd.get_dummies(df, columns=[column], drop_first=True)
-        elif df[column].dtype == 'bool':
+        if df[column].dtype == 'bool':
             df[column] = df[column].astype(int)
     # Encode numerical data
     scaler = StandardScaler()
@@ -169,6 +184,7 @@ def clean_data(data):
     df=remove_outliers(df)
     
     return df
+
 
 def main():
     st.title(" Simple pycaret App")
@@ -184,6 +200,7 @@ def main():
             st.write('The shape of data : ',df.shape)    
             st.subheader('Data Types Of Columns')
             st.write(df.dtypes) 
+            st.write("null values:", df.isna().sum())
 
             # Load data from the uploaded file
             data =clean_data(df)
