@@ -39,7 +39,7 @@ def handling_missing_data(df):
     numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
       
     if len(cat_cols) > 0:
-        cat_missing = st.selectbox("How do you want to handle missing values in categorical columns?", ["most frequent", "create category"])
+        cat_missing = st.selectbox("How do you want to handle missing values in categorical columns?", ["most frequent", "Don't handle (it will replace by No value instead of np.nan)"])
         if cat_missing == "most frequent":
             for col in cat_cols:
                 df[col].fillna(df[col].mode()[0], inplace=True)
@@ -189,6 +189,7 @@ def main():
             data =clean_data(df)
             st.sidebar.success("Data loaded and preprocessed successfully!")
             
+           
             
             Train_model(data)
             st.sidebar.subheader("4.Data Visualization")
